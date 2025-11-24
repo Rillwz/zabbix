@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Satellite Data Grabber",
+  "name": "Satellite Data Grabber Telkomsat",
   "version": "1.0",
   "description": "Grab Forward & Return Satellite Bits/Throughput data from dashboard widgets.",
   "permissions": ["activeTab", "scripting"],
