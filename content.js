@@ -1,27 +1,35 @@
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   if (request.action === "grab_data") {
+    console.log("Mencoba mengambil data untuk keyword:", request.keyword);
     const data = extractDataFromWidget(request.keyword);
     
-    if (data && data.length > 0) {
+    if (data && data.length > 1) { // Lebih dari 1 karena baris pertama adalah header
       downloadCSV(data, request.filename);
-      sendResponse({status: "success", count: data.length});
+      sendResponse({status: "success", count: data.length - 1});
     } else {
+      console.error("Data tidak ditemukan atau widget salah.");
       sendResponse({status: "not_found"});
     }
   }
 });
 
 function extractDataFromWidget(keyword) {
-  // 1. Cari semua widget container
+  // 1. Cari semua widget di halaman
   const widgets = document.querySelectorAll('.dashboard-grid-widget');
   let targetWidget = null;
+  let targetHeader = "";
 
-  // 2. Loop untuk mencari widget dengan Header yang sesuai keyword
+  // 2. Loop cari widget yang header-nya mengandung keyword (Case Insensitive)
   for (let widget of widgets) {
-    const header = widget.querySelector('.dashboard-grid-widget-header h4');
-    if (header && header.innerText.toLowerCase().includes(keyword.toLowerCase())) {
-      targetWidget = widget;
-      break;
+    const headerEl = widget.querySelector('h4'); // Mencari tag h4
+    if (headerEl) {
+      const headerText = headerEl.innerText.toLowerCase();
+      if (headerText.includes(keyword.toLowerCase())) {
+        targetWidget = widget;
+        targetHeader = headerEl.innerText;
+        console.log("Widget ditemukan:", targetHeader);
+        break;
+      }
     }
   }
 
@@ -30,30 +38,46 @@ function extractDataFromWidget(keyword) {
     return null;
   }
 
-  // 3. Ambil data dari Legenda (.svg-graph-legend)
-  // Struktur HTML Anda menunjukkan: Item (Nama), lalu diikuti 3 Value (Min, Avg, Max)
-  const legendItems = targetWidget.querySelectorAll('.svg-graph-legend-item span');
-  const legendValues = targetWidget.querySelectorAll('.svg-graph-legend-value');
+  // 3. Ambil elemen Legenda
+  // Kita cari container legenda spesifik di dalam widget tersebut
+  const legendContainer = targetWidget.querySelector('.svg-graph-legend');
+  
+  if (!legendContainer) {
+    console.error("Container .svg-graph-legend tidak ditemukan di dalam widget.");
+    return null;
+  }
+
+  // 4. Ambil Item (Nama Beam) dan Values (Angka)
+  // Berdasarkan HTML Anda: Nama ada di class .svg-graph-legend-item
+  // Angka ada di class .svg-graph-legend-value
+  const itemElements = legendContainer.querySelectorAll('.svg-graph-legend-item');
+  const valueElements = legendContainer.querySelectorAll('.svg-graph-legend-value');
+
+  console.log(`Ditemukan ${itemElements.length} items dan ${valueElements.length} values.`);
 
   let results = [];
   // Header CSV
-  results.push(["Metric Name", "Min", "Avg", "Max"]);
+  results.push(["Beam Name", "Min", "Avg", "Max"]);
 
-  // Karena setiap 1 Item diikuti oleh 3 Values (Min, Avg, Max)
-  // Kita loop berdasarkan jumlah item
-  for (let i = 0; i < legendItems.length; i++) {
-    let name = legendItems[i].innerText;
-    
-    // Index value dikali 3 karena ada 3 kolom per item
-    let valIndex = i * 3;
-    
-    let min = legendValues[valIndex] ? legendValues[valIndex].innerText : "-";
-    let avg = legendValues[valIndex + 1] ? legendValues[valIndex + 1].innerText : "-";
-    let max = legendValues[valIndex + 2] ? legendValues[valIndex + 2].innerText : "-";
+  // 5. Pairing Data
+  // Pola HTML Anda: 1 Item selalu diikuti logikanya oleh 3 Value (Min, Avg, Max)
+  // Jadi untuk Item ke-0, valuenya ada di index 0, 1, 2
+  // Untuk Item ke-1, valuenya ada di index 3, 4, 5
+  
+  for (let i = 0; i < itemElements.length; i++) {
+    // Ambil teks nama (bersihkan enter/spasi berlebih)
+    let name = itemElements[i].innerText.replace(/[\r\n]+/g, " ").trim();
+    // Hapus koma agar tidak merusak CSV
+    name = name.replace(/,/g, " ");
 
-    // Bersihkan data jika perlu (misal menghapus koma agar format CSV aman)
-    name = name.replace(/,/g, " "); 
-    
+    // Hitung index untuk value
+    let baseIndex = i * 3;
+
+    // Ambil value, gunakan "N/A" jika index tidak ada (untuk keamanan)
+    let min = valueElements[baseIndex] ? valueElements[baseIndex].innerText.trim() : "N/A";
+    let avg = valueElements[baseIndex + 1] ? valueElements[baseIndex + 1].innerText.trim() : "N/A";
+    let max = valueElements[baseIndex + 2] ? valueElements[baseIndex + 2].innerText.trim() : "N/A";
+
     results.push([name, min, avg, max]);
   }
 
@@ -71,13 +95,17 @@ function downloadCSV(rows, filenamePrefix) {
   const encodedUri = encodeURI(csvContent);
   const link = document.createElement("a");
   
-  // Format waktu untuk nama file
   const date = new Date();
-  const timeStr = date.toISOString().slice(0,19).replace(/:/g,"-");
+  // Format waktu: YYYY-MM-DD_HH-mm
+  const timeStr = date.getFullYear() + "-" + 
+                  (date.getMonth()+1).toString().padStart(2, '0') + "-" + 
+                  date.getDate().toString().padStart(2, '0') + "_" + 
+                  date.getHours().toString().padStart(2, '0') + "-" + 
+                  date.getMinutes().toString().padStart(2, '0');
   
   link.setAttribute("href", encodedUri);
   link.setAttribute("download", `${filenamePrefix}_${timeStr}.csv`);
-  document.body.appendChild(link); // Required for FF
+  document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 }

@@ -1,37 +1,39 @@
 document.addEventListener('DOMContentLoaded', function() {
   
-  // Fungsi helper untuk mengirim pesan ke content script
   function triggerGrab(keyword, filenamePrefix) {
+    const msgDiv = document.getElementById('msg');
+    msgDiv.textContent = "Mencari data...";
+
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-      const activeTab = tabs[0];
-      chrome.tabs.sendMessage(activeTab.id, {
+      if (tabs.length === 0) return;
+      
+      chrome.tabs.sendMessage(tabs[0].id, {
         action: "grab_data",
         keyword: keyword,
         filename: filenamePrefix
       }, function(response) {
-        const msgDiv = document.getElementById('msg');
         if (chrome.runtime.lastError) {
-          msgDiv.textContent = "Error: Refresh halaman dulu.";
+          msgDiv.textContent = "Error: Silakan refresh halaman dashboard dulu.";
+          console.error(chrome.runtime.lastError);
         } else if (response && response.status === "success") {
-          msgDiv.textContent = "Data ditemukan! Mengunduh...";
+          msgDiv.textContent = `Berhasil! ${response.count} data diunduh.`;
         } else {
-          msgDiv.textContent = "Widget tidak ditemukan.";
+          msgDiv.textContent = `Widget "${keyword}" tidak ditemukan.`;
         }
       });
     });
   }
 
   // Tombol 1: Forward
+  // Keyword: Cukup "Forward" atau "Forward Satellite" agar match dengan "Forward Satellite Bits..."
   document.getElementById('btnForward').addEventListener('click', function() {
-    // Mencari header yang mengandung kata "Forward Satellite Bits"
-    triggerGrab("Forward Satellite Bits", "forward_satellite_bits");
+    triggerGrab("Forward Satellite", "forward_satellite_bits");
   });
 
   // Tombol 2: Return
+  // Keyword: Cukup "Return Satellite"
   document.getElementById('btnReturn').addEventListener('click', function() {
-    // Mencari header yang mengandung kata "Return Satellite Throughput"
-    // (Asumsi struktur widget sama persis dengan yang Forward)
-    triggerGrab("Return Satellite Throughput", "return_satellite_throughput");
+    triggerGrab("Return Satellite", "return_satellite_throughput");
   });
 
 });
